@@ -6,6 +6,7 @@ import middleware, {subscribe, unsubscribe, invalidate} from './middleware'
 import handleActions from '@f/handle-actions'
 import createAction from '@f/create-action'
 import {fetch} from 'redux-effects-fetch'
+import identity from '@f/identity'
 import element from 'vdux/element'
 import map from '@f/map-obj'
 
@@ -79,7 +80,8 @@ function connect (fn, Ui) {
           ...state[key],
           url,
           loaded: reload,
-          loading: true
+          loading: true,
+          reload
         }
       }),
       [success]: (state, {key, value}) => ({
@@ -122,38 +124,56 @@ function *resolve (mapping, state, local, path) {
     const val = mapping[key]
     if (typeof val !== 'function') {
       const descriptor = typeof mapping[key] === 'string' ? {url: mapping[key]} : mapping[key]
+      const {method = 'GET'} = descriptor
+      const itemState = state[key] || {}
 
-      if (descriptor.url && descriptor.url !== state[key].url) yield resolveUrl(key, descriptor, local, path)
-      else if (descriptor.fragment) yield resolveFragment(key, descriptor, state[key], local, path)
+      if (descriptor.url && (method !== 'GET' || descriptor.url !== itemState.url)) {
+        yield resolveUrl(key, descriptor, local, path)
+      } else if (descriptor.fragment) {
+        yield resolveFragment(key, descriptor, itemState, local, path)
+      }
     }
   }
 }
 
-function *resolveUrl (key, descriptor, local, path) {
-  const {url, invalidate} = descriptor
+function *resolveUrl (key, descriptor, local, path, reload = false) {
+  const {url, method = 'GET',  subscribe: subscribeKey, xf = identity, invalidates, ...fetchParams} = descriptor
 
   if (!url) throw new Error('vdux-summon: Did you forget to specify a url?')
 
   try {
-    if (invalidate !== false) {
+    if (/GET/i.test(method) && subscribeKey !== false) {
       const refresh = function *() {
-        yield resolveUrl(key, descriptor, local, path)
+        yield resolveUrl(key, descriptor, local, path, true)
       }
 
       yield subscribe({key: url, path, refresh})
 
-      if (typeof invalidate === 'string') {
-        yield subscribe({key: invalidate, path, refresh})
-      } else if (Array.isArray(invalidate)) {
-        yield invalidate.map(key => subscribe({key, path, refresh}))
+      if (typeof subscribeKey === 'string') {
+        yield subscribe({key: subscribeKey, path, refresh})
+      } else if (Array.isArray(subscribeKey)) {
+        yield subscribeKey.map(key => subscribe({key, path, refresh}))
       }
     }
 
-    yield local(loading)({url, key, reload: false})
+    yield local(loading)({url, key, reload})
 
-    const {value} = yield fetch(getUrl(url))
+    const {value} = yield fetch(getUrl(url), {
+      method,
+      ...fetchParams
+    })
 
-    yield local(success)({url, key, value})
+    yield local(success)({
+      url,
+      key,
+      value: xf(value)
+    })
+
+    if (invalidates) {
+      yield Array.isArray(invalidates)
+        ? invalidates.map(key => invalidate(key))
+        : invalidate(invalidates)
+    }
   } catch (err) {
     yield local(error)({
       url,
@@ -164,7 +184,7 @@ function *resolveUrl (key, descriptor, local, path) {
 }
 
 function *resolveFragment (key, descriptor, state, local, path) {
-  const {fragment, merge = defaultMerge} = descriptor
+  const {fragment, merge = defaultMerge, xf = identity} = descriptor
   if (!state.url) throw new Error('vdux-summon: Fragment can only be specified if an existing url has already been set for the collection')
 
   try {
@@ -172,7 +192,7 @@ function *resolveFragment (key, descriptor, state, local, path) {
 
     let {value} = yield fetch(getUrl(url + fragment))
 
-    value = merge(state.value, value)
+    value = merge(state.value, xf(value))
 
     yield local(success)({url, key, value})
   } catch (err) {

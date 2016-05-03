@@ -147,13 +147,13 @@ vdux({
 
 ### Custom invalidation keys
 
-Sometimes you want to invalidate in broader strokes than particular urls, or otherwise decouple the invalidations from the endpoints that they request. To do this, you may add an `invalidate` key to your descriptor:
+Sometimes you want to invalidate in broader strokes than particular urls, or otherwise decouple the invalidations from the endpoints that they request. To do this, you may add a `subscribe` key to your descriptor:
 
 ```javascript
 summon(props => {
   feed: {
     url: `/user/following/${props.userId}`,
-    invalidate: 'feed update'
+    subscribe: 'feed update'
   }
 })
 ```
