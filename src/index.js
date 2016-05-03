@@ -218,8 +218,14 @@ function *resolveFragment (key, descriptor, state, local, path) {
 
 function getUrl (url) {
   return url[0] === '/'
-    ? config.baseUrl + url
+    ? join(config.baseUrl, url)
     : url
+}
+
+function join (a, b) {
+  return a[a.length - 1] === '/' && b[0] === '/'
+    ? a + b.slice(1)
+    : a + b
 }
 
 function defaultMerge (prev = {items: []}, next) {
