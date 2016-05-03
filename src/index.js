@@ -193,6 +193,8 @@ function *resolveUrl (key, descriptor, local, path, reload = false) {
 
 function *resolveFragment (key, descriptor, state, local, path) {
   const {fragment, merge = defaultMerge, xf = identity} = descriptor
+  const {url} = state
+
   if (!state.url) throw new Error('vdux-summon: Fragment can only be specified if an existing url has already been set for the collection')
 
   try {
