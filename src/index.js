@@ -142,7 +142,9 @@ function *resolveUrl (key, descriptor, local, path, reload = false) {
   if (!url) throw new Error('vdux-summon: Did you forget to specify a url?')
 
   try {
-    if (/GET/i.test(method) && subscribeKey !== false) {
+    const isGet = /GET/i.test(method)
+
+    if (isGet && subscribeKey !== false) {
       const refresh = function *() {
         yield resolveUrl(key, descriptor, local, path, true)
       }
@@ -168,6 +170,12 @@ function *resolveUrl (key, descriptor, local, path, reload = false) {
       key,
       value: xf(value)
     })
+
+    // Automatically invalidate the URL that a non-get request was
+    // sent to, unless `invalidates` is explicitly set to `false`
+    if (!isGet && invalidates !== false) {
+      yield invalidate(url)
+    }
 
     if (invalidates) {
       yield Array.isArray(invalidates)
