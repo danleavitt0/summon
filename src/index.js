@@ -2,6 +2,7 @@
  * Imports
  */
 
+import middleware, {subscribe, unsubscribe, invalidate} from './middleware'
 import handleActions from '@f/handle-actions'
 import createAction from '@f/create-action'
 import {fetch} from 'redux-effects-fetch'
@@ -17,18 +18,25 @@ let config = {
 }
 
 /**
+ * Component url/key map
+ */
+
+const keysToComponents = {}
+const componentsToKeys = {}
+
+/**
+ * Actions
+ */
+
+const loading = createAction('vdux-summon: request loading')
+const success = createAction('vdux-summon: request succeeded')
+const error = createAction('vdux-summon: request error')
+
+/**
  * Summon
  */
 
 function connect (fn, Ui) {
-  /**
-   * Actions
-   */
-
-  const loading = createAction('vdux-summon: request loading')
-  const success = createAction('vdux-summon: request succeeded')
-  const error = createAction('vdux-summon: request error')
-
   /**
    * Component
    */
@@ -43,17 +51,17 @@ function connect (fn, Ui) {
       }), fn(props))
     },
 
-    onCreate ({props, state, local}) {
-      return resolve(fn(props), state, local)
+    onCreate ({props, state, local, path}) {
+      return resolve(fn(props), state, local, path)
     },
 
-    render ({props, state, children, local}) {
+    render ({props, state, children, local, path}) {
       const mapping = fn(props)
       const fns = {}
 
       for (const key in mapping) {
         if (typeof mapping[key] === 'function') {
-          fns[key] = (...args) => resolve(mapping[key](...args), state, local)
+          fns[key] = (...args) => resolve(mapping[key](...args), state, local, path)
         }
       }
 
@@ -95,57 +103,85 @@ function connect (fn, Ui) {
 
     onUpdate (prev, {props, state, local}) {
       return resolve(fn(props), state, local)
-    }
-  }
+    },
 
-  /**
-   * Resolve data
-   *
-   * The meat of this library is here
-   */
-
-  function *resolve (mapping, state, local) {
-    for (const key in mapping) {
-      const val = mapping[key]
-      if (typeof val !== 'function') {
-        yield resolveDescriptor(key, mapping[key], state[key], local)
-      }
-    }
-  }
-
-  function *resolveDescriptor (key, descriptor, state, local) {
-    descriptor = typeof descriptor === 'string' ? {url: descriptor} : descriptor
-    const {url = state.url, fragment = '', merge} = descriptor
-
-    if (!url) {
-      if (fragment) throw new Error('vdux-summon: Fragment can only be specified if an existing url has already been set for the collection')
-      else throw new Error('vdux-summon: Did you forget to specify a url?')
-    }
-
-    if (url !== state.url || fragment) {
-      try {
-        yield local(loading)({url, key, reload: !!fragment})
-
-        let {value} = yield fetch(getUrl(url + fragment))
-
-        if (descriptor.merge || fragment) {
-          const merge = typeof descriptor.merge === 'function' ? descriptor.merge : defaultMerge
-          value = merge(state.value, value)
-        }
-
-        yield local(success)({url, key, value})
-      } catch (err) {
-        console.log("err", err.stack)
-        yield local(error)({
-          url,
-          key,
-          error: err.value || err
-        })
-      }
+    onRemove ({path}) {
+      return unsubscribe(path)
     }
   }
 
   return Component
+}
+
+/**
+ * Data resolution
+ */
+
+function *resolve (mapping, state, local, path) {
+  for (const key in mapping) {
+    const val = mapping[key]
+    if (typeof val !== 'function') {
+      const descriptor = typeof mapping[key] === 'string' ? {url: mapping[key]} : mapping[key]
+
+      if (descriptor.url && descriptor.url !== state[key].url) yield resolveUrl(key, descriptor, local, path)
+      else if (descriptor.fragment) yield resolveFragment(key, descriptor, state[key], local, path)
+    }
+  }
+}
+
+function *resolveUrl (key, descriptor, local, path) {
+  const {url, invalidate} = descriptor
+
+  if (!url) throw new Error('vdux-summon: Did you forget to specify a url?')
+
+  try {
+    if (invalidate !== false) {
+      const refresh = function *() {
+        yield resolveUrl(key, descriptor, local, path)
+      }
+
+      yield subscribe({key: url, path, refresh})
+
+      if (typeof invalidate === 'string') {
+        yield subscribe({key: invalidate, path, refresh})
+      } else if (Array.isArray(invalidate)) {
+        yield invalidate.map(key => subscribe({key, path, refresh}))
+      }
+    }
+
+    yield local(loading)({url, key, reload: false})
+
+    const {value} = yield fetch(getUrl(url))
+
+    yield local(success)({url, key, value})
+  } catch (err) {
+    yield local(error)({
+      url,
+      key,
+      error: err.value || err
+    })
+  }
+}
+
+function *resolveFragment (key, descriptor, state, local, path) {
+  const {fragment, merge = defaultMerge} = descriptor
+  if (!state.url) throw new Error('vdux-summon: Fragment can only be specified if an existing url has already been set for the collection')
+
+  try {
+    yield local(loading)({url, key, reload: true})
+
+    let {value} = yield fetch(getUrl(url + fragment))
+
+    value = merge(state.value, value)
+
+    yield local(success)({url, key, value})
+  } catch (err) {
+    yield local(error)({
+      url,
+      key,
+      error: err.value || err
+    })
+  }
 }
 
 /**
@@ -179,3 +215,7 @@ connect.defaults = defaults
  */
 
 export default connect
+export {
+  invalidate,
+  middleware
+}

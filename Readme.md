@@ -89,6 +89,87 @@ summon(props => ({
 
 This will inject a `more` function into your props which you can call with a `pageToken` to generate a new `fragment`. The fragment will be appended to the existing URL for that collection and re-requested, with the result being merged into the existing collection.
 
+## Invalidation & Subscription
+
+A unique feature of vdux-summon is its invalidation/subscription capabilities. Each request descriptor may subscribe to a key or list of keys (it is automatically subscribed to the URL of the request). You may then trigger an invalidaton of these keys from elsewhere in the application. For example, consider a follow button:
+
+```javascript
+import summon from 'vdux-summon'
+
+function render ({props}) {
+  return (
+    <Button onClick={followUser(props.userId)} disabled={props.isFollowing.value}>
+      FollowUser
+    </Button>
+  )
+}
+
+export default summon(props => ({
+  isFollowing: `/user/following/${props.userId}`
+}), {
+  render
+})
+```
+
+This causes the current user to follow another. But what if there are disparate pieces of UI that rely on this information but have already loaded it? We want them to update too, and we want our button to automatically update itself to indicate that the user is already followed. Let's update our example to make that work:
+
+```javascript
+import summon, {invalidate} from 'vdux-summon'
+
+function render ({props}) {
+  return (
+    <Button onClick={[followUser(props.userId), () => invalidate(`/user/following/${props.userId}`)]} disabled={props.isFollowing.value}>
+      FollowUser
+    </Button>
+  )
+}
+
+export default summon(props => ({
+  isFollowing: `/user/following/${props.userId}`
+}), {
+  render
+})
+```
+
+Now not only will the follow button update, but *any* component that has summoned `/user/following/${props.userId}` will get refetched and rendered. This makes it easy to keep your data consistent across components.
+
+### Middleware
+
+In order to make this work however, you must install the summon middleware in your vdux middleware stack:
+
+```javascript
+import * as summon from 'vdux-summon'
+
+vdux({
+  middleware: [...middleware, summon.middleware]
+})
+```
+
+### Custom invalidation keys
+
+Sometimes you want to invalidate in broader strokes than particular urls, or otherwise decouple the invalidations from the endpoints that they request. To do this, you may add an `invalidate` key to your descriptor:
+
+```javascript
+summon(props => {
+  feed: {
+    url: `/user/following/${props.userId}`,
+    invalidate: 'feed update'
+  }
+})
+```
+
+Then somewhere else:
+
+```javascript
+import io from 'socket.io'
+import vdux from 'vdux'
+
+const socket = io()
+
+// ... setup vdux...
+
+socket.on('feed update', msg => dispatch(invalidate('feed update')))
+```
 
 ## License
 
