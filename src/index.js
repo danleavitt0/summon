@@ -120,6 +120,8 @@ function connect (fn, Ui) {
  */
 
 function *resolve (mapping, state, local, path) {
+  const result = []
+
   for (const key in mapping) {
     const val = mapping[key]
     if (typeof val !== 'function') {
@@ -128,12 +130,16 @@ function *resolve (mapping, state, local, path) {
       const itemState = state[key] || {}
 
       if (descriptor.url && (method !== 'GET' || descriptor.url !== itemState.url)) {
-        yield resolveUrl(key, descriptor, local, path)
+        result.push(yield resolveUrl(key, descriptor, local, path))
       } else if (descriptor.fragment) {
-        yield resolveFragment(key, descriptor, itemState, local, path)
+        result.push(yield resolveFragment(key, descriptor, itemState, local, path))
       }
     }
   }
+
+  return result.length === 1
+    ? result[0]
+    : result
 }
 
 function *resolveUrl (key, descriptor, local, path, reload = false) {
@@ -165,10 +171,11 @@ function *resolveUrl (key, descriptor, local, path, reload = false) {
       ...fetchParams
     })
 
+    const xfVal = xf(value)
     yield local(success)({
       url,
       key,
-      value: xf(value)
+      value: xfVal
     })
 
     // Automatically invalidate the URL that a non-get request was
@@ -182,12 +189,16 @@ function *resolveUrl (key, descriptor, local, path, reload = false) {
         ? invalidates.map(key => invalidate(key))
         : invalidate(invalidates)
     }
+
+    return xfVal
   } catch (err) {
     yield local(error)({
       url,
       key,
       error: err.value || err
     })
+
+    throw err
   }
 }
 
@@ -205,12 +216,15 @@ function *resolveFragment (key, descriptor, state, local, path) {
     value = merge(state.value, xf(value))
 
     yield local(success)({url, key, value})
+    return value
   } catch (err) {
     yield local(error)({
       url,
       key,
       error: err.value || err
     })
+
+    throw err
   }
 }
 
