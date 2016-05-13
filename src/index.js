@@ -76,15 +76,11 @@ function connect (fn) {
       },
 
       reducer: handleActions({
-        [loading]: (state, {key, url, reload, params = {}}) => ({
+        [loading]: (state, {key, ...rest}) => ({
           ...state,
           [key]: {
             ...state[key],
-            url,
-            loaded: reload,
-            loading: true,
-            reload,
-            params
+            ...rest
           }
         }),
         [success]: (state, {key, value}) => ({
@@ -207,10 +203,11 @@ function *resolveUrl (key, descriptor, local, path, reload = false) {
 }
 
 function *resolveFragment (key, descriptor, state, local, path) {
-  const {params, xf = identity} = descriptor
+  const {params, xf = identity, clear} = descriptor
   const merge = getMerge(descriptor.merge)
   const {url} = state
   const mergedParams = {...(state.params || {}), ...params}
+  const prevValue = clear ? null : state.value
 
   if (!state.url) throw new Error('vdux-summon: Fragment can only be specified if an existing url has already been set for the collection')
 
@@ -218,13 +215,16 @@ function *resolveFragment (key, descriptor, state, local, path) {
     yield local(loading)({
       url,
       key,
+      value: prevValue,
+      loading: true,
+      loaded: !clear,
       reload: true,
       params: mergedParams
     })
 
     let {value} = yield fetch(getUrl(url, qs.stringify(mergedParams)))
 
-    value = merge(state.value, xf(value))
+    value = merge(prevValue, xf(value))
 
     yield local(success)({url, key, value})
     return value
@@ -280,7 +280,9 @@ function mergeReplace (prev, next) {
   return next
 }
 
-function mergeConcat (prev = {items: []}, next) {
+function mergeConcat (prev, next) {
+  prev = prev || {items: []}
+
   return {
     ...next,
     items: [...prev.items, ...next.items]
