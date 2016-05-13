@@ -142,7 +142,7 @@ function *resolve (mapping, state, local, path) {
     : result
 }
 
-function *resolveUrl (key, descriptor, local, path, reload = false) {
+function *resolveUrl (key, descriptor, local, path) {
   const {url, method = 'GET',  subscribe: subscribeKey, xf = identity, invalidates, ...fetchParams} = descriptor
 
   if (!url) throw new Error('vdux-summon: Did you forget to specify a url?')
@@ -152,7 +152,7 @@ function *resolveUrl (key, descriptor, local, path, reload = false) {
 
     if (isGet && subscribeKey !== false) {
       const refresh = function *() {
-        yield resolveUrl(key, descriptor, local, path, true)
+        yield resolveUrl(key, descriptor, local, path)
       }
 
       yield subscribe({key: url, path, refresh})
@@ -164,7 +164,13 @@ function *resolveUrl (key, descriptor, local, path, reload = false) {
       }
     }
 
-    yield local(loading)({url, key, reload})
+    yield local(loading)({
+      url,
+      key,
+      value: null,
+      loading: true,
+      loaded: false
+    })
 
     const {value} = yield fetch(getUrl(url), {
       method,
@@ -218,7 +224,6 @@ function *resolveFragment (key, descriptor, state, local, path) {
       value: prevValue,
       loading: true,
       loaded: !clear,
-      reload: true,
       params: mergedParams
     })
 
