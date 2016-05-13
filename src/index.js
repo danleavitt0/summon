@@ -76,11 +76,15 @@ function connect (fn) {
       },
 
       reducer: handleActions({
-        [loading]: (state, {key, ...rest}) => ({
+        [loading]: (state, {key, url, clear, params}) => ({
           ...state,
           [key]: {
             ...state[key],
-            ...rest
+            url,
+            loading: true,
+            loaded: !clear,
+            value: clear ? null : state[key].value,
+            params
           }
         }),
         [success]: (state, {key, value}) => ({
@@ -97,6 +101,7 @@ function connect (fn) {
           [key]: {
             ...state[key],
             loading: false,
+            value: null,
             error
           }
         })
@@ -120,7 +125,7 @@ function connect (fn) {
  */
 
 function *resolve (mapping, state, local, path) {
-  const result = []
+  const paused = []
 
   for (const key in mapping) {
     const val = mapping[key]
@@ -130,19 +135,20 @@ function *resolve (mapping, state, local, path) {
       const itemState = state[key] || {}
 
       if (descriptor.url && (method !== 'GET' || descriptor.url !== itemState.url)) {
-        result.push(yield resolveUrl(key, descriptor, local, path))
+        paused.push(resolveUrl(key, descriptor, local, path))
       } else if (descriptor.params) {
-        result.push(yield resolveFragment(key, descriptor, itemState, local, path))
+        paused.push(resolveFragment(key, descriptor, itemState, local, path))
       }
     }
   }
 
+  const result = yield paused
   return result.length === 1
     ? result[0]
     : result
 }
 
-function *resolveUrl (key, descriptor, local, path) {
+function *resolveUrl (key, descriptor, local, path, clear = true) {
   const {url, method = 'GET',  subscribe: subscribeKey, xf = identity, invalidates, ...fetchParams} = descriptor
 
   if (!url) throw new Error('vdux-summon: Did you forget to specify a url?')
@@ -152,7 +158,7 @@ function *resolveUrl (key, descriptor, local, path) {
 
     if (isGet && subscribeKey !== false) {
       const refresh = function *() {
-        yield resolveUrl(key, descriptor, local, path)
+        yield resolveUrl(key, descriptor, local, path, false)
       }
 
       yield subscribe({key: url, path, refresh})
@@ -167,9 +173,8 @@ function *resolveUrl (key, descriptor, local, path) {
     yield local(loading)({
       url,
       key,
-      value: null,
-      loading: true,
-      loaded: false
+      clear,
+      params: null
     })
 
     const {value} = yield fetch(getUrl(url), {
@@ -221,9 +226,7 @@ function *resolveFragment (key, descriptor, state, local, path) {
     yield local(loading)({
       url,
       key,
-      value: prevValue,
-      loading: true,
-      loaded: !clear,
+      clear,
       params: mergedParams
     })
 
