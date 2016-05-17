@@ -2,12 +2,13 @@
  * Imports
  */
 
-import middleware, {subscribe, unsubscribe, invalidate} from './middleware'
+import middleware, {subscribe, unsubscribe, invalidate, localInvalidate} from './middleware'
 import handleActions from '@f/handle-actions'
 import createAction from '@f/create-action'
 import {fetch} from 'redux-effects-fetch'
 import identity from '@f/identity'
 import element from 'vdux/element'
+
 import map from '@f/map-obj'
 import qs from 'qs'
 
@@ -18,13 +19,6 @@ import qs from 'qs'
 let config = {
   baseUrl: ''
 }
-
-/**
- * Component url/key map
- */
-
-const keysToComponents = {}
-const componentsToKeys = {}
 
 /**
  * Actions
@@ -55,7 +49,10 @@ function connect (fn) {
       },
 
       onCreate ({props, state, local, path}) {
-        return resolve(fn(props), state, local, path)
+        return [
+          subscribe(path),
+          resolve(fn(props), state, local)
+        ]
       },
 
       render ({props, state, children, local, path}) {
@@ -64,7 +61,7 @@ function connect (fn) {
 
         for (const key in mapping) {
           if (typeof mapping[key] === 'function') {
-            fns[key] = (...args) => resolve(mapping[key](...args), state, local, path)
+            fns[key] = (...args) => resolve(mapping[key](...args), state, local)
           }
         }
 
@@ -75,37 +72,7 @@ function connect (fn) {
         )
       },
 
-      reducer: handleActions({
-        [loading]: (state, {key, url, clear, params}) => ({
-          ...state,
-          [key]: {
-            ...state[key],
-            url,
-            loading: true,
-            loaded: !clear,
-            value: clear ? null : state[key].value,
-            params
-          }
-        }),
-        [success]: (state, {key, value}) => ({
-          ...state,
-          [key]: {
-            ...state[key],
-            loading: false,
-            loaded: true,
-            value
-          }
-        }),
-        [error]: (state, {key, error}) => ({
-          ...state,
-          [key]: {
-            ...state[key],
-            loading: false,
-            value: null,
-            error
-          }
-        })
-      }),
+      reducer,
 
       onUpdate (prev, {props, state, local}) {
         return resolve(fn(props), state, local)
@@ -121,24 +88,110 @@ function connect (fn) {
 }
 
 /**
+ * Reducer
+ */
+
+const reducer = handleActions({
+  [loading]: (state, {key, method, url, clear, params}) => ({
+    ...state,
+    [key]: {
+      ...state[key],
+      method,
+      url,
+      loading: true,
+      invalid: false,
+      loaded: !clear,
+      value: clear ? null : state[key].value,
+      params
+    }
+  }),
+  [success]: (state, {key, value}) => ({
+    ...state,
+    [key]: {
+      ...state[key],
+      loading: false,
+      loaded: true,
+      invalid: false,
+      value
+    }
+  }),
+  [error]: (state, {key, error}) => ({
+    ...state,
+    [key]: {
+      ...state[key],
+      loading: false,
+      value: null,
+      invalid: false,
+      error
+    }
+  }),
+  [localInvalidate]: (state, {key, cb}) => {
+    const newState = {}
+    let changed = false
+
+    for (let name in state) {
+      const item = state[name]
+
+      if (shouldInvalidate(item, key)) {
+        newState[name] = {...item, invalid: cb}
+        changed = true
+      }
+    }
+
+    if (!changed) {
+      cb()
+      return state
+    }
+
+    return {
+      ...state,
+      ...newState
+    }
+  }
+})
+
+function shouldInvalidate (item, key) {
+  return item.method === 'GET'
+    && (item.url === key
+    || item.subscribe === key
+    || (Array.isArray(item.subscribe) && item.subscribe.indexOf(key) !== -1))
+}
+
+/**
  * Data resolution
  */
 
 function *resolve (mapping, state, local, path) {
   const paused = []
+  const resolvingKeys = {}
 
   for (const key in mapping) {
     const val = mapping[key]
     if (typeof val !== 'function') {
-      const descriptor = typeof mapping[key] === 'string' ? {url: mapping[key]} : mapping[key]
+      const descriptor = typeof mapping[key] === 'string'
+        ? {url: mapping[key]}
+        : mapping[key]
       const {method = 'GET'} = descriptor
       const itemState = state[key] || {}
 
       if (descriptor.url && (method !== 'GET' || descriptor.url !== itemState.url)) {
-        paused.push(resolveUrl(key, descriptor, local, path))
+        resolvingKeys[key] = true
+        paused.push(resolveUrl(key, descriptor, itemState, local))
       } else if (descriptor.params) {
-        paused.push(resolveFragment(key, descriptor, itemState, local, path))
+        resolvingKeys[key] = true
+        paused.push(resolveFragment(key, descriptor, itemState, local))
       }
+    }
+  }
+
+  for (const key in state) {
+    const itemState = state[key]
+    const descriptor = typeof mapping[key] === 'string'
+      ? {url: mapping[key]}
+      : mapping[key]
+
+    if (!resolvingKeys[key] && itemState.invalid) {
+      paused.push(resolveUrl(key, descriptor, itemState, local, false))
     }
   }
 
@@ -148,7 +201,7 @@ function *resolve (mapping, state, local, path) {
     : result
 }
 
-function *resolveUrl (key, descriptor, local, path, clear = true) {
+function *resolveUrl (key, descriptor, state, local, clear = true) {
   const {url, method = 'GET',  subscribe: subscribeKey, xf = identity, invalidates, ...fetchParams} = descriptor
 
   if (!url) throw new Error('vdux-summon: Did you forget to specify a url?')
@@ -156,21 +209,8 @@ function *resolveUrl (key, descriptor, local, path, clear = true) {
   try {
     const isGet = /GET/i.test(method)
 
-    if (isGet && subscribeKey !== false) {
-      const refresh = function *() {
-        yield resolveUrl(key, descriptor, local, path, false)
-      }
-
-      yield subscribe({key: url, path, refresh})
-
-      if (typeof subscribeKey === 'string') {
-        yield subscribe({key: subscribeKey, path, refresh})
-      } else if (Array.isArray(subscribeKey)) {
-        yield subscribeKey.map(key => subscribe({key, path, refresh}))
-      }
-    }
-
     yield local(loading)({
+      method,
       url,
       key,
       clear,
@@ -189,6 +229,8 @@ function *resolveUrl (key, descriptor, local, path, clear = true) {
       value: xfVal
     })
 
+    if (state.invalid) state.invalid(null, xfVal)
+
     // Automatically invalidate the URL that a non-get request was
     // sent to, unless `invalidates` is explicitly set to `false`
     if (!isGet && invalidates !== false) {
@@ -203,6 +245,8 @@ function *resolveUrl (key, descriptor, local, path, clear = true) {
 
     return xfVal
   } catch (err) {
+    if (state.invalid) state.invalid(err)
+
     yield local(error)({
       url,
       key,
@@ -213,7 +257,7 @@ function *resolveUrl (key, descriptor, local, path, clear = true) {
   }
 }
 
-function *resolveFragment (key, descriptor, state, local, path) {
+function *resolveFragment (key, descriptor, state, local) {
   const {params, xf = identity, clear} = descriptor
   const merge = getMerge(descriptor.merge)
   const {url} = state
@@ -313,5 +357,6 @@ connect.defaults = defaults
 export default connect
 export {
   invalidate,
-  middleware
+  middleware,
+  reducer
 }

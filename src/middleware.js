@@ -2,64 +2,60 @@
  * Imports
  */
 
+import {toEphemeral} from 'redux-ephemeral'
 import createAction from '@f/create-action'
-import forEach from '@f/foreach'
-
-/**
- * Key/component maps
- */
-
-const componentsToKeys = {}
-const keysToComponents = {}
+import {reducer} from '.'
+import map from '@f/map'
 
 /**
  * Actions
  */
 
-const invalidate = createAction('vdux-summon: Invalidate key')
-const subscribe = createAction('vdux-summon: Register invalidation key')
-const unsubscribe = createAction('vdux-summon: Deregister component')
+const subscribe = createAction('vdux-summon: subscribe')
+const unsubscribe = createAction('vdux-summon: unsubscribe')
+const invalidate = createAction('vdux-summon: invalidate')
+const localInvalidate = createAction('vdux-summon: local invalidate')
+
+/**
+ * Component paths
+ */
+
+const paths = []
 
 /**
  * Middleware
  */
 
-function middleware ({dispatch}) {
-  return next => action => {
+function middleware (stateKey = 'summon') {
+  return ({dispatch, getState}) => next => action => {
     switch (action.type) {
-      // Register an invalidation key to a particular component
       case subscribe.type: {
-        const {path, refresh, key} = action.payload
-        const keys = componentsToKeys[path] = componentsToKeys[path] || []
-
-        if (keys.indexOf(key) === -1) {
-          keys.push(key)
-        }
-
-        const components = keysToComponents[key] = keysToComponents[key] || {}
-        if (!components[path]) {
-          components[path] = refresh
+        if (paths.indexOf(action.payload) === -1) {
+          paths.push(action.payload)
         }
       }
       break
+      case unsubscribe.type: {
+        const idx = paths.indexOf(action.payload)
+        if (idx !== -1) {
+          paths.splice(idx, 1)
+        }
+      }
       // Invalidate a key and re-render the components that
       // depend on it
       case invalidate.type: {
         const key = action.payload
-        forEach(component => dispatch(component()), keysToComponents[key])
-      }
-      break
-      // Deregister a component when it has been removed
-      case unsubscribe.type: {
-        const path = action.payload
-        const keys = componentsToKeys[path] || []
 
-        delete componentsToKeys[path]
-
-        forEach(key => {
-          const components = keysToComponents[key] || {}
-          delete components[path]
-        }, keys)
+        return Promise.all(map(
+          path => new Promise((resolve, reject) => dispatch(
+            toEphemeral(
+              path,
+              reducer,
+              localInvalidate({key, cb: (err, val) => err ? reject(err) : resolve(val)})
+            )
+          )),
+          paths
+        ))
       }
       break
       default:
@@ -75,6 +71,7 @@ function middleware ({dispatch}) {
 export default middleware
 export {
   subscribe,
+  unsubscribe,
   invalidate,
-  unsubscribe
+  localInvalidate
 }
