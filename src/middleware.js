@@ -41,6 +41,7 @@ function middleware (stateKey = 'summon') {
           paths.splice(idx, 1)
         }
       }
+      break
       // Invalidate a key and re-render the components that
       // depend on it
       case invalidate.type: {
