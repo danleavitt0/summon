@@ -55,13 +55,13 @@ function connect (fn) {
         ]
       },
 
-      render ({props, state, children, local, path}) {
+      render ({props, state, children, local}) {
         const mapping = fn(props)
         const fns = {}
 
         for (const key in mapping) {
           if (typeof mapping[key] === 'function') {
-            fns[key] = (...args) => resolve(mapping[key](...args), state, local)
+            fns[key] = (...args) => resolve(mapping[key](...args), state, local, true)
           }
         }
 
@@ -98,6 +98,7 @@ const reducer = handleActions({
       ...state[key],
       method,
       url,
+      error: null,
       loading: true,
       invalid: false,
       loaded: !clear,
@@ -161,7 +162,7 @@ function shouldInvalidate (item, key) {
  * Data resolution
  */
 
-function *resolve (mapping, state, local, path) {
+function *resolve (mapping, state, local, rethrow) {
   const paused = []
   const resolvingKeys = {}
 
@@ -176,10 +177,10 @@ function *resolve (mapping, state, local, path) {
 
       if (descriptor.url && (method !== 'GET' || descriptor.url !== itemState.url)) {
         resolvingKeys[key] = true
-        paused.push(resolveUrl(key, descriptor, itemState, local))
+        paused.push(resolveUrl(key, descriptor, itemState, local, rethrow))
       } else if (descriptor.params) {
         resolvingKeys[key] = true
-        paused.push(resolveFragment(key, descriptor, itemState, local))
+        paused.push(resolveFragment(key, descriptor, itemState, local, rethrow))
       }
     }
   }
@@ -191,7 +192,7 @@ function *resolve (mapping, state, local, path) {
       : mapping[key]
 
     if (!resolvingKeys[key] && itemState.invalid) {
-      paused.push(resolveUrl(key, descriptor, itemState, local, false))
+      paused.push(resolveUrl(key, descriptor, itemState, local, rethrow, false))
     }
   }
 
@@ -201,7 +202,7 @@ function *resolve (mapping, state, local, path) {
     : result
 }
 
-function *resolveUrl (key, descriptor, state, local, clear = true) {
+function *resolveUrl (key, descriptor, state, local, rethrow, clear = true) {
   const {url, method = 'GET',  subscribe: subscribeKey, xf = identity, invalidates, ...fetchParams} = descriptor
 
   if (!url) throw new Error('vdux-summon: Did you forget to specify a url?')
@@ -253,11 +254,13 @@ function *resolveUrl (key, descriptor, state, local, clear = true) {
       error: err.value || err
     })
 
-    throw err
+    if (rethrow) {
+      throw err
+    }
   }
 }
 
-function *resolveFragment (key, descriptor, state, local) {
+function *resolveFragment (key, descriptor, state, local, rethrow) {
   const {params, xf = identity, clear} = descriptor
   const merge = getMerge(descriptor.merge)
   const {url} = state
@@ -287,7 +290,9 @@ function *resolveFragment (key, descriptor, state, local) {
       error: err.value || err
     })
 
-    throw err
+    if (rethrow) {
+      throw err
+    }
   }
 }
 
