@@ -33,7 +33,7 @@ const error = createAction('vdux-summon: request error')
  */
 
 function connect (fn) {
-  return function (Ui) {
+  return Ui => {
     /**
      * Component
      */
@@ -66,7 +66,7 @@ function connect (fn) {
         }
 
         return (
-          <Ui {...state} {...fns} {...props}>
+          <Ui {...normalizeState(state, mapping)} {...fns} {...props}>
             {children}
           </Ui>
         )
@@ -156,6 +156,19 @@ function shouldInvalidate (item, key) {
     && (item.url === key
     || item.subscribe === key
     || (Array.isArray(item.subscribe) && item.subscribe.indexOf(key) !== -1))
+}
+
+function normalizeState (state, mapping) {
+  return map((state, key) => ({
+    ...state,
+    loading: state.loading || mappingUrl(mapping[key]) !== state.url
+  }), state)
+}
+
+function mappingUrl (mapping) {
+  return typeof mapping === 'string'
+    ? mapping
+    : mapping.url
 }
 
 /**
