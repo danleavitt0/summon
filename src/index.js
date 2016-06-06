@@ -159,10 +159,10 @@ function shouldInvalidate (item, key) {
 }
 
 function normalizeState (state, mapping) {
-  return map((state, key) => ({
-    ...state,
-    loading: state.loading || mappingUrl(mapping[key]) !== state.url
-  }), state)
+  return map((state, key) => mapping[key] && mappingUrl(mapping[key]) !== state.url
+      ? {...state, loading: true}
+      : state
+    , state)
 }
 
 function mappingUrl (mapping) {
