@@ -247,7 +247,8 @@ function *resolveUrl (key, descriptor, state, local, rethrow, clear = true) {
 
     // Automatically invalidate the URL that a non-get request was
     // sent to, unless `invalidates` is explicitly set to `false`
-    if (!isGet && invalidates !== false) {
+    // or the method was 'DELETE'
+    if (!isGet && invalidates !== false && method !== 'DELETE') {
       yield invalidate(url)
     }
 
