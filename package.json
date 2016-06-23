@@ -2,7 +2,7 @@
   "name": "vdux-summon",
   "description": "Summon data for your components",
   "repository": "git://github.com/vdux-components/summon.git",
-  "version": "0.1.18",
+  "version": "0.1.19",
   "license": "MIT",
   "main": "lib/index.js",
   "scripts": {
