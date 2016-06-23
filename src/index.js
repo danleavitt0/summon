@@ -92,12 +92,13 @@ function connect (fn) {
  */
 
 const reducer = handleActions({
-  [loading]: (state, {key, method, url, clear, params}) => ({
+  [loading]: (state, {key, method, url, clear, params, subscribe}) => ({
     ...state,
     [key]: {
       ...state[key],
       method,
       url,
+      subscribe,
       error: null,
       loading: true,
       invalid: false,
@@ -224,6 +225,7 @@ function *resolveUrl (key, descriptor, state, local, rethrow, clear = true) {
     const isGet = /GET/i.test(method)
 
     yield local(loading)({
+      subscribe: subscribeKey,
       method,
       url,
       key,
