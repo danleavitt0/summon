@@ -239,11 +239,6 @@ function *resolveUrl (key, descriptor, state, local, rethrow, clear = true) {
     })
 
     const xfVal = xf(value)
-    yield local(success)({
-      url,
-      key,
-      value: xfVal
-    })
 
     if (state.invalid) state.invalid(null, xfVal)
 
@@ -259,6 +254,12 @@ function *resolveUrl (key, descriptor, state, local, rethrow, clear = true) {
         ? invalidates.map(key => invalidate(key))
         : invalidate(invalidates)
     }
+
+    yield local(success)({
+      url,
+      key,
+      value: xfVal
+    })
 
     return xfVal
   } catch (err) {
