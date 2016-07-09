@@ -182,6 +182,8 @@ function *resolve (mapping, state, local, rethrow) {
 
   for (const key in mapping) {
     const val = mapping[key]
+    if (!val) continue
+
     if (typeof val !== 'function') {
       const descriptor = typeof mapping[key] === 'string'
         ? {url: mapping[key]}
