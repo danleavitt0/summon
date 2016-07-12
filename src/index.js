@@ -8,7 +8,7 @@ import createAction from '@f/create-action'
 import {fetch} from 'redux-effects-fetch'
 import identity from '@f/identity'
 import element from 'vdux/element'
-
+import sleep from '@f/sleep'
 import map from '@f/map-obj'
 import qs from 'qs'
 
@@ -25,6 +25,8 @@ let config = {
  */
 
 const loading = createAction('vdux-summon: request loading')
+const enqueue = createAction('vdux-summon: enqueue request')
+const shiftQueue = createAction('vdux-summon: shift queue')
 const success = createAction('vdux-summon: request succeeded')
 const error = createAction('vdux-summon: request error')
 
@@ -74,8 +76,18 @@ function connect (fn) {
 
       reducer,
 
-      onUpdate (prev, {props, state, local}) {
-        return resolve(fn(props), state, local)
+      onUpdate: function * (prev, {props, state, local}) {
+        for (let key in state) {
+          const desc = state[key]
+          const pdesc = prev.state[key] || {}
+
+          if (pdesc.loading && !desc.loading && desc.queue && desc.queue.length) {
+            yield local(shiftQueue)({key})
+            yield desc.queue[0]
+          }
+        }
+
+        yield resolve(fn(props), state, local)
       },
 
       onRemove ({path}) {
@@ -105,6 +117,20 @@ const reducer = handleActions({
       loaded: !clear,
       value: clear ? null : state[key].value,
       params
+    }
+  }),
+  [enqueue]: (state, {key, request}) => ({
+    ...state,
+    [key]: {
+      ...state[key],
+      queue: [...(state[key].queue || []), request]
+    }
+  }),
+  [shiftQueue]: (state, {key}) => ({
+    ...state,
+    [key]: {
+      ...state[key],
+      queue: state[key].queue.slice(1)
     }
   }),
   [success]: (state, {key, value}) => ({
@@ -192,8 +218,15 @@ function *resolve (mapping, state, local, rethrow) {
       const itemState = state[key] || {}
 
       if (descriptor.url && (method !== 'GET' || descriptor.url !== itemState.url)) {
+        const request = resolveUrl(key, descriptor, itemState, local, rethrow)
+
         resolvingKeys[key] = true
-        paused.push(resolveUrl(key, descriptor, itemState, local, rethrow))
+
+        if (descriptor.serialize && itemState.loading) {
+          yield local(enqueue)({key, request})
+        } else {
+          paused.push(request)
+        }
       } else if (descriptor.params) {
         resolvingKeys[key] = true
         paused.push(resolveFragment(key, descriptor, itemState, local, rethrow))
@@ -265,6 +298,12 @@ function *resolveUrl (key, descriptor, state, local, rethrow, clear = true) {
 
     return xfVal
   } catch (err) {
+    if (descriptor.autoretry) {
+      yield sleep(1000)
+      yield resolveUrl(key, descriptor, state, local, rethrow, clear)
+      return
+    }
+
     if (state.invalid) state.invalid(err)
 
     yield local(error)({

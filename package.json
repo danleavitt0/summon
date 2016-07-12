@@ -18,6 +18,7 @@
     "@f/handle-actions": "^1.1.2",
     "@f/identity": "^1.1.1",
     "@f/map": "^1.5.3",
+    "@f/sleep": "^1.0.0",
     "qs": "^6.2.0",
     "redux-effects-fetch": "^0.4.6"
   },
