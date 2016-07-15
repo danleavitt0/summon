@@ -218,7 +218,7 @@ function *resolve (mapping, state, local, rethrow) {
       const itemState = state[key] || {}
 
       if (descriptor.url && (method !== 'GET' || descriptor.url !== itemState.url)) {
-        const request = resolveUrl(key, descriptor, itemState, local, rethrow)
+        const request = resolveUrl(key, descriptor, itemState, local, rethrow, descriptor.clear)
 
         resolvingKeys[key] = true
 
