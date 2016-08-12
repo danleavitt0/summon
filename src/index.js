@@ -29,6 +29,7 @@ const enqueue = createAction('vdux-summon: enqueue request')
 const shiftQueue = createAction('vdux-summon: shift queue')
 const success = createAction('vdux-summon: request succeeded')
 const error = createAction('vdux-summon: request error')
+const shiftInvalidate = createAction('vdux-summon: shift invalidate')
 
 /**
  * Summon
@@ -45,6 +46,7 @@ function connect (fn) {
         return map((url, name) => ({
           name,
           loading: true,
+          invalid: [],
           error: null,
           value: null
         }), fn(props))
@@ -113,7 +115,7 @@ const reducer = handleActions({
       subscribe,
       error: null,
       loading: true,
-      invalid: false,
+      invalid: [],
       loaded: !clear,
       value: clear ? null : state[key].value,
       params
@@ -139,7 +141,7 @@ const reducer = handleActions({
       ...state[key],
       loading: false,
       loaded: true,
-      invalid: false,
+      invalid: [],
       value
     }
   }),
@@ -149,7 +151,7 @@ const reducer = handleActions({
       ...state[key],
       loading: false,
       value: null,
-      invalid: false,
+      invalid: [],
       error
     }
   }),
@@ -161,7 +163,7 @@ const reducer = handleActions({
       const item = state[name]
 
       if (shouldInvalidate(item, key)) {
-        newState[name] = {...item, invalid: cb}
+        newState[name] = {...item, invalid: [...(item.invalid || []), cb]}
         changed = true
       }
     }
@@ -174,6 +176,20 @@ const reducer = handleActions({
     return {
       ...state,
       ...newState
+    }
+  },
+  [shiftInvalidate]: (state, name) => {
+    const item = state[name]
+    const invalid = (item.invalid || []).slice()
+
+    invalid.shift()
+
+    return {
+      ...state,
+      [name]: {
+        ...item,
+        invalid
+      }
     }
   }
 })
@@ -240,7 +256,7 @@ function *resolve (mapping, state, local, rethrow) {
       ? {url: mapping[key]}
       : mapping[key]
 
-    if (!resolvingKeys[key] && itemState.invalid) {
+    if (!resolvingKeys[key] && itemState.invalid.length) {
       paused.push(resolveUrl(key, descriptor, itemState, local, rethrow, false))
     }
   }
@@ -275,7 +291,10 @@ function *resolveUrl (key, descriptor, state, local, rethrow, clear = true) {
 
     const xfVal = xf(value)
 
-    if (state.invalid) state.invalid(null, xfVal)
+    if (state.invalid && state.invalid[0]) {
+      state.invalid[0](null, xfVal)
+      yield local(shiftInvalidate)(key)
+    }
 
     // Automatically invalidate the URL that a non-get request was
     // sent to, unless `invalidates` is explicitly set to `false`
@@ -304,7 +323,10 @@ function *resolveUrl (key, descriptor, state, local, rethrow, clear = true) {
       return
     }
 
-    if (state.invalid) state.invalid(err)
+    if (state.invalid && state.invalid[0]) {
+      state.invalid[0](err)
+      yield local(shiftInvalidate)(key)
+    }
 
     yield local(error)({
       url,
