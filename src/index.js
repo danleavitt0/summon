@@ -106,7 +106,7 @@ function connect (fn) {
  */
 
 const reducer = handleActions({
-  [loading]: (state, {key, method, url, clear, params, subscribe}) => ({
+  [loading]: (state, {key, method, url, clear, params, subscribe}) => state && ({
     ...state,
     [key]: {
       ...state[key],
@@ -121,21 +121,21 @@ const reducer = handleActions({
       params
     }
   }),
-  [enqueue]: (state, {key, request}) => ({
+  [enqueue]: (state, {key, request}) => state && ({
     ...state,
     [key]: {
       ...state[key],
       queue: [...(state[key].queue || []), request]
     }
   }),
-  [shiftQueue]: (state, {key}) => ({
+  [shiftQueue]: (state, {key}) => state && ({
     ...state,
     [key]: {
       ...state[key],
       queue: state[key].queue.slice(1)
     }
   }),
-  [success]: (state, {key, value}) => ({
+  [success]: (state, {key, value}) => state && ({
     ...state,
     [key]: {
       ...state[key],
@@ -145,7 +145,7 @@ const reducer = handleActions({
       value
     }
   }),
-  [error]: (state, {key, error}) => ({
+  [error]: (state, {key, error}) => state && ({
     ...state,
     [key]: {
       ...state[key],
@@ -156,6 +156,8 @@ const reducer = handleActions({
     }
   }),
   [localInvalidate]: (state, {key, cb}) => {
+    if (!state) return
+
     const newState = {}
     let changed = false
 
@@ -179,6 +181,8 @@ const reducer = handleActions({
     }
   },
   [shiftInvalidate]: (state, name) => {
+    if (!state) return
+
     const item = state[name]
     const invalid = (item.invalid || []).slice()
 
