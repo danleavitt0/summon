@@ -115,6 +115,7 @@ const reducer = handleActions({
       subscribe,
       error: null,
       loading: true,
+      inflight: ((state[key] || {}).inflight || 0) + 1,
       invalid: [],
       loaded: !clear,
       value: clear ? null : state[key].value,
@@ -139,7 +140,8 @@ const reducer = handleActions({
     ...state,
     [key]: {
       ...state[key],
-      loading: false,
+      loading: state[key].inflight > 1 ? true : false,
+      inflight: (state[key].inflight || 1) - 1,
       loaded: true,
       invalid: [],
       value
@@ -149,7 +151,8 @@ const reducer = handleActions({
     ...state,
     [key]: {
       ...state[key],
-      loading: false,
+      loading: state[key].inflight > 1 ? true : false,
+      inflight: (state[key].inflight || 1) - 1,
       value: null,
       invalid: [],
       error
