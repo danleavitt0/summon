@@ -47,6 +47,8 @@ function connect (fn) {
           name,
           loading: true,
           invalid: [],
+          hasLoaded: false,
+          loaded: false,
           error: null,
           value: null
         }), fn(props))
@@ -142,6 +144,7 @@ const reducer = handleActions({
       ...state[key],
       loading: state[key].inflight > 1 ? true : false,
       inflight: (state[key].inflight || 1) - 1,
+      hasLoaded: true,
       loaded: true,
       invalid: [],
       value
