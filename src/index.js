@@ -111,7 +111,7 @@ const reducer = handleActions({
   [loading]: (state, {key, method, url, clear, params, subscribe}) => state && ({
     ...state,
     [key]: {
-      ...state[key],
+      ...(state[key] || {}),
       method,
       url,
       subscribe,
@@ -120,30 +120,30 @@ const reducer = handleActions({
       inflight: ((state[key] || {}).inflight || 0) + 1,
       invalid: [],
       loaded: !clear,
-      value: clear ? null : state[key].value,
+      value: clear ? null : (state[key] || {}).value,
       params
     }
   }),
   [enqueue]: (state, {key, request}) => state && ({
     ...state,
-    [key]: {
+    [key]: state[key] && {
       ...state[key],
       queue: [...(state[key].queue || []), request]
     }
   }),
   [shiftQueue]: (state, {key}) => state && ({
     ...state,
-    [key]: {
+    [key]: state[key] && {
       ...state[key],
       queue: state[key].queue.slice(1)
     }
   }),
   [success]: (state, {key, value}) => state && ({
     ...state,
-    [key]: {
+    [key]: state[key] && {
       ...state[key],
       loading: state[key].inflight > 1 ? true : false,
-      inflight: (state[key].inflight || 1) - 1,
+      inflight: Math.max((state[key].inflight || 1) - 1, 0),
       hasLoaded: true,
       loaded: true,
       invalid: [],
@@ -152,10 +152,10 @@ const reducer = handleActions({
   }),
   [error]: (state, {key, error}) => state && ({
     ...state,
-    [key]: {
+    [key]: state[key] && {
       ...state[key],
       loading: state[key].inflight > 1 ? true : false,
-      inflight: (state[key].inflight || 1) - 1,
+      inflight: Math.max((state[key].inflight || 1) - 1, 0),
       value: null,
       invalid: [],
       error
@@ -187,7 +187,7 @@ const reducer = handleActions({
     }
   },
   [shiftInvalidate]: (state, name) => {
-    if (!state) return
+    if (!state || !state[name]) return
 
     const item = state[name]
     const invalid = (item.invalid || []).slice()
@@ -262,6 +262,8 @@ function *resolve (mapping, state, local, rethrow) {
 
   for (const key in state) {
     const itemState = state[key]
+    if (!itemState) continue
+
     const descriptor = typeof mapping[key] === 'string'
       ? {url: mapping[key]}
       : mapping[key]
