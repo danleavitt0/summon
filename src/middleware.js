@@ -21,24 +21,29 @@ const localInvalidate = createAction('vdux-summon: local invalidate')
  */
 
 const paths = []
+const reducers = {}
 
 /**
  * Middleware
  */
 
-function middleware (stateKey = 'summon') {
-  return ({dispatch, getState}) => next => action => {
+function middleware ({dispatch}) {
+  return next => action => {
     switch (action.type) {
       case subscribe.type: {
-        if (paths.indexOf(action.payload) === -1) {
-          paths.push(action.payload)
+        const {path, reducer} = action.payload
+        if (paths.indexOf(path) === -1) {
+          paths.push(path)
+          reducers[path] = reducer
         }
       }
       break
       case unsubscribe.type: {
-        const idx = paths.indexOf(action.payload)
+        const path = action.payload
+        const idx = paths.indexOf(path)
         if (idx !== -1) {
           paths.splice(idx, 1)
+          delete reducers[path]
         }
       }
       break
@@ -51,8 +56,8 @@ function middleware (stateKey = 'summon') {
           path => new Promise((resolve, reject) => dispatch(
             toEphemeral(
               path,
-              reducer,
-              localInvalidate({key, cb: (err, val) => err ? reject(err) : resolve(val)})
+              reducers[path],
+              localInvalidate([key, (err, val) => err ? reject(err) : resolve(val)])
             )
           )),
           paths
