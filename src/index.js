@@ -150,7 +150,7 @@ function connect (fn) {
               : mapping[key]
 
             if (!resolvingKeys[key] && itemState.invalid.length) {
-              paused.push(actions.resolveUrl(key, descriptor, itemState, rethrow, false))
+              paused.push(actions.resolveUrl(key, descriptor, itemState, rethrow, descriptor.clear))
             }
           }
 
