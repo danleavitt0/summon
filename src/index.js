@@ -214,6 +214,7 @@ function connect (fn) {
             const xfErr = config.transformError(err)
 
             if (descriptor.autoretry) {
+              yield actions.decinflight(key)
               yield sleep(1000)
               yield actions.resolveUrl(key, descriptor, state, rethrow, clear)
               return
@@ -295,10 +296,16 @@ function connect (fn) {
             queue: [...(state[key].queue || []), request]
           }
         }),
-        shiftQueue: (state, {key}) => ({
+        shiftQueue: (state, key) => ({
           [key]: state[key] && {
             ...state[key],
             queue: state[key].queue.slice(1)
+          }
+        }),
+        decinflight: (state, key) => ({
+          [key]: state[key] && {
+            ...state[key],
+            inflight: state[key].inflight - 1
           }
         }),
         success: (state, {key, value}) => ({
@@ -367,7 +374,7 @@ function connect (fn) {
           const pdesc = prev.state[key] || {}
 
           if (pdesc.loading && !desc.loading && desc.queue && desc.queue.length) {
-            yield actions.shiftQueue({key})
+            yield actions.shiftQueue(key)
             yield desc.queue[0]
           }
         }
