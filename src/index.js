@@ -336,7 +336,7 @@ function connect (fn) {
           for (let name in state) {
             const item = state[name]
 
-            if (shouldInvalidate(item, key)) {
+            if (item && shouldInvalidate(item, key)) {
               newState[name] = {...item, invalid: [...(item.invalid || []), cb]}
               changed = true
             }
