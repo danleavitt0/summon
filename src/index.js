@@ -285,7 +285,7 @@ function connect (fn) {
             loading: true,
             inflight: ((state[key] || {}).inflight || 0) + 1,
             invalid: [],
-            loaded: !clear,
+            loaded: clear ? false : (state[key] || {}).loaded,
             value: clear ? null : (state[key] || {}).value,
             params
           }
