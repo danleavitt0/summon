@@ -175,10 +175,10 @@ function connect (fn) {
               url,
               key,
               clear,
-              params: null
+              params: descriptor.params
             })
 
-            const {value} = yield fetchJSON(getUrl(url), {
+            const {value} = yield fetchJSON(getUrl(url, qs.stringify(descriptor.params)), {
               method,
               ...fetchParams
             })
