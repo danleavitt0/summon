@@ -143,7 +143,7 @@ function connect (fn) {
 
           for (const key in state) {
             const itemState = state[key]
-            if (!itemState) continue
+            if (!itemState || !mapping[key]) continue
 
             const descriptor = typeof mapping[key] === 'string'
               ? {url: mapping[key]}
