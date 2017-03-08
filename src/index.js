@@ -3,8 +3,8 @@
  */
 
 import middleware, {subscribe, unsubscribe, invalidate, localInvalidate} from './middleware'
-import {query, bearer} from 'redux-effects-credentials'
 import fetchMw, {fetch, fetchEncodeJSON} from 'redux-effects-fetch'
+import {query, bearer} from 'redux-effects-credentials'
 import {component, element} from 'vdux'
 import identity from '@f/identity'
 import {compose} from 'redux'
@@ -19,6 +19,11 @@ import qs from 'qs'
 let config = {
   baseUrl: '',
   credentials: [],
+
+  transformRequest (req) {
+    return req
+  },
+
   transformResponse (res) {
     return res
   },
@@ -406,7 +411,7 @@ function fetchJSON (url, params = {}) {
     }
   }
 
-  return fetch(url, params)
+  return config.transformRequest(fetch(url, params))
 }
 
 function shouldInvalidate (item, key) {
